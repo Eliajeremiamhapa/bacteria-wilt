@@ -12,7 +12,6 @@ app = Flask(__name__)
 CORS(app)  # Muhimu sana kwa ajili ya Mobile App na Web integration yako
 
 # 1. MFUMO WA DYNAMIC PATH KWA AJILI YA RENDER (HAKUNA D:\ TENA)
-# Mfumo huu unasoma faili popote lilipo mradi wako (Local PC au Render Cloud)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'bacteria wilt.onnx')
 
@@ -21,7 +20,6 @@ if not os.path.exists(MODEL_PATH):
     print("[HINT] Hakikisha faili la 'bacteria wilt.onnx' lipo kwenye folda moja na hii app.py")
 
 # Anzisha ONNX Inference Session
-# Weka CPU execution provider ili isilete errors kwenye seva za bure za Render
 session = ort.InferenceSession(MODEL_PATH, providers=['CPUExecutionProvider'])
 input_name = session.get_inputs()[0].name
 
@@ -31,6 +29,8 @@ class_names = ['Bacterial Wilt', 'Healthy']
 # --- LOGIC YA KUAMSHA SERVER (KEEP-ALIVE) ---
 def keep_alive():
     """Inapiga picha server kila baada ya dakika 10 kuzuia isilale kwenye Render (Free Tier)"""
+    # Subiri sekunde 10 mwanzoni ili kuhakikisha server imekamilisha kuwaka
+    time.sleep(10)
     while True:
         try:
             host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
@@ -38,9 +38,17 @@ def keep_alive():
                 url = f"https://{host}/health"
                 requests.get(url, timeout=5)
                 print("Keep-alive: Ping sent successfully!")
+            else:
+                # Kama uko local PC na hujaweka mazingira ya Render, isisumbue kujipiga ping
+                print("Keep-alive: Waiting for Render environment...")
         except Exception as e:
             print(f"Keep-alive error: {e}")
         time.sleep(600)  # Dakika 10
+
+# SULUHISHO: Anzisha thread hapa juu moja kwa moja ili iwake chini ya Gunicorn au Python run
+# Hii inahakikisha uzi unaanza hata kama Render ikirun kwa kutumia gunicorn app:app
+keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+keep_alive_thread.start()
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -124,8 +132,5 @@ def predict():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
-    if os.environ.get('RENDER'):
-        threading.Thread(target=keep_alive, daemon=True).start()
-    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
